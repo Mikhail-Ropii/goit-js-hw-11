@@ -1,68 +1,72 @@
+import SearchPicApi from './fetch-pictures';
 import Notiflix from 'notiflix';
-import debounce from 'lodash.debounce';
-import fetchCountries from './fetchCountries';
+import SimpleLightbox from 'simplelightbox';
+import 'simplelightbox/dist/simple-lightbox.min.css';
 import './css/styles.css';
-
-const DEBOUNCE_DELAY = 300;
+import picTpl from './template.hbs'
 
 const refs = {
-    inputCountry: document.querySelector('input#search-box'),
-    countryList: document.querySelector('.country-list'),
-    countryInfo: document.querySelector('.country-info'),
+    searchForm: document.querySelector('.search-form'),
+    loadMoreBtn: document.querySelector('.load-more'),
+    contGallery: document.querySelector('.gallery'),
 }
 
-function countrySearch(evt) {
-    const inputValue = evt.target.value.trim();
-    fetchCountries(inputValue).then(data => searchRendForm(data));
+const searchPicApi = new SearchPicApi();
 
-}
-const debounceFetch = debounce(countrySearch, DEBOUNCE_DELAY)
-refs.inputCountry.addEventListener('input', debounceFetch);
+refs.searchForm.addEventListener('submit', searchPictures);
+refs.loadMoreBtn.addEventListener('click', loadMore);
 
-
-function searchRendForm(data) {
-    if (data.length > 10) {
-        Notiflix.Notify.info("Too many matches found. Please enter a more specific name.");
-        clearResult();
-        return;
-    }
-    if (data.length > 1) {
-        renderCountryList(data);
-    }
-   if (data.length === 1) {
-        renderCountryInfo(data);
-    }
-    
+function searchPictures(e) {
+    e.preventDefault();
+    clearResult();
+    searchPicApi.inputValue = e.currentTarget.elements.searchQuery.value;
+    searchPicApi.resetPage();
+    refs.loadMoreBtn.classList.add('is-hidden');
+    searchPicApi.fetchPictures().then(rendResults);
+   
 }
 
 function clearResult() {
-    refs.countryList.innerHTML = "";
-    refs.countryInfo.innerHTML = "";
+    refs.contGallery.innerHTML = '';
+    }
+    
+
+function loadMore() {
+    searchPicApi.fetchPictures().then(loadMoreRend);
 }
 
-function renderCountryList(data) {
-    clearResult();
-        const countryListMarkup =
-            data.map((country) =>
-                `<li style="list-style: none" class="country-item">
-        <img src="${country.flags.svg}" width="50">
-        <span class=country-name>${country.name.official}</span></li>`
-            ).join('')
-
-        refs.countryList.insertAdjacentHTML("beforeend", countryListMarkup);
+function scroll() {
+const { height: cardHeight } = document.querySelector('.gallery').firstElementChild.getBoundingClientRect();
+window.scrollBy({
+  top: cardHeight * 2,
+  behavior: 'smooth',
+});
 }
 
-function renderCountryInfo(data) {
-    clearResult();
-    const [{ name, capital, population, flags, languages }] = data;
-    const languagesPars = Object.values(languages).join(', ')
-    const countryInfoMarkup = 
-    `<p><img src="${flags.svg}" width="50">
-    <span class="name-text">${name.official}</span></p>
-    <p class="info-text">Capital: <span class="info-value">${capital}</span></p>
-    <p class="info-text">Population: <span class="info-value">${population}<span></p>
-    <p class="info-text">Languages: <span class="info-value">${languagesPars}</span></p>`
-
-    refs.countryInfo.insertAdjacentHTML("beforeend", countryInfoMarkup);
+function lightbox() {
+    const lightbox = new SimpleLightbox('.gallery a', { captionsData: "alt", captionDelay: 250 });
 }
 
+
+function loadMoreRend(data) {
+    refs.contGallery.insertAdjacentHTML('beforeend', picTpl(data.hits));
+    scroll();
+    lightbox();
+    const maxPage = data.totalHits / 40;
+    if (searchPicApi.page > maxPage) {
+        refs.loadMoreBtn.classList.add('is-hidden');
+        Notiflix.Notify.info("We're sorry, but you've reached the end of search results.");
+    }
+}
+
+function rendResults(data) {
+    if (data.hits.length === 0) {
+        Notiflix.Notify.info("Sorry, there are no images matching your search query. Please try again.");
+        return;
+    }
+    Notiflix.Notify.info(`Hooray! We found ${data.totalHits} images.`)
+    refs.contGallery.insertAdjacentHTML('beforeend', picTpl(data.hits));
+    refs.loadMoreBtn.classList.remove('is-hidden');
+
+    lightbox();
+}
